@@ -9,3 +9,8 @@ node_modules
 .claude
 .windsurf
 node_modules.zip
+
+
+docker-compose.yml
+dockerfile
+.dockerignore
