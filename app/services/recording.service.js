@@ -10,6 +10,7 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-
 class RecordingService {
     async saveChunk({
         cameraName,
+        alias,
         filePath,
         fileName,
         fileSize,
@@ -17,14 +18,26 @@ class RecordingService {
         rtspUrl,
         location,
     }) {
-        const [camera] = await Camera.findOrCreate({
-            where: { name: cameraName },
-            defaults: {
-                name: cameraName,
-                rtspUrl: rtspUrl || null,
-                location: location || null,
+        const identifier = (alias || cameraName || 'unknown').trim();
+        let camera = await Camera.findOne({
+            where: {
+                [Op.or]: [
+                    { alias: identifier },
+                    { name: identifier }
+                ]
             }
         });
+
+        if (!camera) {
+            camera = await Camera.create({
+                alias: identifier,
+                name: identifier,
+                rtsp: rtspUrl || null,
+                wilayah: location || null,
+                available: true,
+                isRecording: true
+            });
+        }
 
         const [chunk, created] = await RecordingChunks.findOrCreate({
             where: { filePath },
@@ -49,14 +62,21 @@ class RecordingService {
             ...plain,
             id: plain.id.toString(),
             fileSize: plain.fileSize ? plain.fileSize.toString() : '0',
-            cameraName: camera.name,
+            cameraAlias: camera.alias,
+            cameraName: camera.name || camera.alias,
         };
     }
 
     async getRecordingsByDate(cameraIdentifier, dateString) {
         const isUUID = UUID_REGEX.test(cameraIdentifier);
         const camera = await Camera.findOne({
-            where: isUUID ? { id: cameraIdentifier } : { name: cameraIdentifier }
+            where: {
+                [Op.or]: [
+                    { alias: cameraIdentifier },
+                    { name: cameraIdentifier },
+                    ...(isUUID ? [{ id: cameraIdentifier }] : [])
+                ]
+            }
         });
 
         if (!camera) {
@@ -80,9 +100,13 @@ class RecordingService {
         return {
             camera: {
                 id: camera.id,
-                name: camera.name,
+                sqlServerId: camera.sqlServerId,
+                alias: camera.alias,
+                name: camera.name || camera.alias,
+                wilayah: camera.wilayah,
+                area: camera.area,
                 location: camera.location,
-                rtspUrl: camera.rtspUrl,
+                rtspUrl: camera.rtsp,
             },
             date: dateString,
             totalChunks: chunks.length,
@@ -96,7 +120,7 @@ class RecordingService {
                     fileSize: plain.fileSize ? plain.fileSize.toString() : '0',
                     startTime: plain.startTime,
                     createdAt: plain.createdAt,
-                    streamUrl: `/recordings/${encodeURIComponent(camera.name)}/${encodeURIComponent(plain.fileName)}`
+                    streamUrl: `/recordings/${encodeURIComponent(camera.alias)}/${encodeURIComponent(plain.fileName)}`
                 };
             })
         };

@@ -2,6 +2,7 @@ require('dotenv').config();
 const app = require('./app');
 const db = require('./app/models');
 const { initCleanupJob } = require('./app/jobs/cleanup.job');
+const { initSyncJob } = require('./app/jobs/sync.job');
 
 const PORT = parseInt(process.env.SERVER_PORT, 10) || parseInt(process.env.PORT, 10) || parseInt(process.argv[3], 10) || 3002;
 
@@ -14,8 +15,9 @@ async function startServer() {
         await db.sequelize.sync({ alter: true });
         console.info('Sequelize models synchronized successfully');
 
-        // Initialize scheduled retention cleanup job
+        // Initialize scheduled jobs
         initCleanupJob();
+        initSyncJob();
 
         const server = app.listen(PORT, () => {
             console.info(`Server running and listening on http://localhost:${PORT}`);

@@ -16,7 +16,6 @@ module.exports = (sequelize, DataType) => {
         filePath: {
             type: DataType.STRING,
             allowNull: false,
-            unique: true,
             field: 'file_path',
         },
         fileName: {
