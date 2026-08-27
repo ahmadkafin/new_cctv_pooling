@@ -1,50 +1,163 @@
-const prisma = require('../config/prisma')
+const moment = require('moment');
+const fs = require('fs');
+const db = require('../models');
+
+const { Camera, RecordingChunks, Sequelize } = db;
+const { Op } = Sequelize;
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 class RecordingService {
     async saveChunk({
         cameraName,
         filePath,
         fileName,
         fileSize,
-        startTime
+        startTime,
+        rtspUrl,
+        location,
     }) {
-        await prisma.camera.upsert({
+        const [camera] = await Camera.findOrCreate({
             where: { name: cameraName },
-            update: {},
-            create: { name: cameraName }
+            defaults: {
+                name: cameraName,
+                rtspUrl: rtspUrl || null,
+                location: location || null,
+            }
         });
 
-        return await prisma.recordingChunkcreate({
-            data: {
-                cameraId: cameraName,
+        const [chunk, created] = await RecordingChunks.findOrCreate({
+            where: { filePath },
+            defaults: {
+                cameraId: camera.id,
                 filePath,
-                filename,
-                fileSize: BigInt(fileSize),
+                fileName: fileName || filePath.split('/').pop(),
+                fileSize: fileSize ? BigInt(fileSize) : BigInt(0),
                 startTime: startTime ? new Date(startTime) : new Date(),
             }
         });
+
+        if (!created) {
+            await chunk.update({
+                fileSize: fileSize ? BigInt(fileSize) : chunk.fileSize,
+                startTime: startTime ? new Date(startTime) : chunk.startTime,
+            });
+        }
+
+        const plain = chunk.get({ plain: true });
+        return {
+            ...plain,
+            id: plain.id.toString(),
+            fileSize: plain.fileSize ? plain.fileSize.toString() : '0',
+            cameraName: camera.name,
+        };
     }
 
-    async getRecordingsByDate(cameraName, dateString) {
-        const startOfDay = new Date(`${dateString}T00:00:00.000Z`)
-        const endOfDay = new Date(`${dateString}T23:59:59.999Z`)
-
-        const chunks = await prisma.recordingChunk.findMany({
-            where: {
-                cameraId: cameraName,
-                startTime: {
-                    gte: startOfDay,
-                    lte: endOfDay,
-                },
-            },
-            orderBy: { startTime: 'asc' }
+    async getRecordingsByDate(cameraIdentifier, dateString) {
+        const isUUID = UUID_REGEX.test(cameraIdentifier);
+        const camera = await Camera.findOne({
+            where: isUUID ? { id: cameraIdentifier } : { name: cameraIdentifier }
         });
 
-        return chunks.map((chunk) => ({
-            ...chunk,
-            id: chunk.id.toString(),
-            fileSize: chunk.fileSize.toString(),
-            streamUrl: `/stream/${chunk.cameraId}/${chunk.fileName}`,
-        }));
+        if (!camera) {
+            return null;
+        }
+
+        const startOfDay = moment.utc(dateString).startOf('day').toDate();
+        const endOfDay = moment.utc(dateString).endOf('day').toDate();
+
+        const chunks = await RecordingChunks.findAll({
+            where: {
+                cameraId: camera.id,
+                startTime: {
+                    [Op.gte]: startOfDay,
+                    [Op.lte]: endOfDay,
+                }
+            },
+            order: [['startTime', 'ASC']],
+        });
+
+        return {
+            camera: {
+                id: camera.id,
+                name: camera.name,
+                location: camera.location,
+                rtspUrl: camera.rtspUrl,
+            },
+            date: dateString,
+            totalChunks: chunks.length,
+            recordings: chunks.map((chunk) => {
+                const plain = chunk.get({ plain: true });
+                return {
+                    id: plain.id.toString(),
+                    cameraId: plain.cameraId,
+                    filePath: plain.filePath,
+                    fileName: plain.fileName,
+                    fileSize: plain.fileSize ? plain.fileSize.toString() : '0',
+                    startTime: plain.startTime,
+                    createdAt: plain.createdAt,
+                    streamUrl: `/recordings/${encodeURIComponent(camera.name)}/${encodeURIComponent(plain.fileName)}`
+                };
+            })
+        };
+    }
+
+    async getAllCameras() {
+        const cameras = await Camera.findAll({
+            include: [{
+                model: RecordingChunks,
+                as: 'recordings',
+                attributes: ['id']
+            }],
+            order: [['name', 'ASC']]
+        });
+
+        return cameras.map(cam => {
+            const plain = cam.get({ plain: true });
+            return {
+                id: plain.id,
+                name: plain.name,
+                location: plain.location,
+                rtspUrl: plain.rtspUrl,
+                totalRecordings: plain.recordings ? plain.recordings.length : 0,
+                createdAt: plain.createdAt,
+                updatedAt: plain.updatedAt,
+            };
+        });
+    }
+
+    async cleanOldRecordings(retentionDays = 7) {
+        const cutoffDate = moment().subtract(retentionDays, 'days').toDate();
+
+        const oldChunks = await RecordingChunks.findAll({
+            where: {
+                startTime: {
+                    [Op.lt]: cutoffDate
+                }
+            }
+        });
+
+        let filesDeleted = 0;
+        for (const chunk of oldChunks) {
+            try {
+                if (chunk.filePath && fs.existsSync(chunk.filePath)) {
+                    fs.unlinkSync(chunk.filePath);
+                    filesDeleted++;
+                }
+            } catch (err) {
+                console.error(`Failed to delete recording file ${chunk.filePath}:`, err.message);
+            }
+        }
+
+        const deletedRows = await RecordingChunks.destroy({
+            where: {
+                startTime: {
+                    [Op.lt]: cutoffDate
+                }
+            }
+        });
+
+        return { deletedRows, filesDeleted, cutoffDate };
     }
 }
 
