@@ -41,6 +41,7 @@ class RecordingController {
                 startTime: startTime || new Date(),
                 rtspUrl: req.body.rtspUrl || req.body.rtsp_url,
                 location: req.body.location,
+                duration: req.body.duration,
             });
 
             return res.status(201).json({

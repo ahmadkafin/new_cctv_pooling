@@ -34,7 +34,13 @@ module.exports = (sequelize, DataType) => {
             allowNull: false,
             defaultValue: DataType.NOW,
             field: 'start_time',
-        }
+        },
+        duration: {
+            type: DataType.STRING,
+            allowNull: false,
+            defaultValue: '00:00',
+            field: 'duration'
+        },
     }, {
         tableName: 'recording_chunks',
         timestamps: true,
