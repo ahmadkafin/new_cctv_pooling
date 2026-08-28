@@ -83,8 +83,8 @@ class RecordingService {
             return null;
         }
 
-        const startOfDay = moment.utc(dateString).startOf('day').toDate();
-        const endOfDay = moment.utc(dateString).endOf('day').toDate();
+        const startOfDay = moment(dateString).startOf('day').toDate();
+        const endOfDay = moment(dateString).endOf('day').toDate();
 
         const chunks = await RecordingChunks.findAll({
             where: {
@@ -118,6 +118,7 @@ class RecordingService {
                     filePath: plain.filePath,
                     fileName: plain.fileName,
                     fileSize: plain.fileSize ? plain.fileSize.toString() : '0',
+                    duration: plain.duration,
                     startTime: plain.startTime,
                     createdAt: plain.createdAt,
                     streamUrl: `/recordings/${encodeURIComponent(camera.alias)}/${encodeURIComponent(plain.fileName)}`
