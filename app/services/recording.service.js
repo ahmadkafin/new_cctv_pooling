@@ -14,6 +14,7 @@ class RecordingService {
         filePath,
         fileName,
         fileSize,
+        duration,
         startTime,
         rtspUrl,
         location,
@@ -39,6 +40,12 @@ class RecordingService {
             });
         }
 
+        let calculatedStartTime = new Date();
+        if (duration) {
+            const durationInMs = parseFloat(duration) * 1000;
+            calculatedStartTime = new Date(Date.now() - durationInMs);
+        }
+
         const [chunk, created] = await RecordingChunks.findOrCreate({
             where: { filePath },
             defaults: {
@@ -46,13 +53,15 @@ class RecordingService {
                 filePath,
                 fileName: fileName || filePath.split('/').pop(),
                 fileSize: fileSize ? BigInt(fileSize) : BigInt(0),
-                startTime: startTime ? new Date(startTime) : new Date(),
+                duration: duration ? parseFloat(duration) : null,
+                startTime: calculatedStartTime,
             }
         });
 
         if (!created) {
             await chunk.update({
                 fileSize: fileSize ? BigInt(fileSize) : chunk.fileSize,
+                duration: duration ? parseFloat(duration) : chunk.duration,
                 startTime: startTime ? new Date(startTime) : chunk.startTime,
             });
         }
