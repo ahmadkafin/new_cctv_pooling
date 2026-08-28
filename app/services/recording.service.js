@@ -4,6 +4,7 @@ const db = require('../models');
 
 const { Camera, RecordingChunks, Sequelize } = db;
 const { Op } = Sequelize;
+const parselabel = require('../helpers/parse_label_into_name.helper')
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -110,6 +111,7 @@ class RecordingService {
             camera: {
                 id: camera.id,
                 sqlServerId: camera.sqlServerId,
+                st_name: parselabel.parseLabelIntoName(camera.alias),
                 alias: camera.alias,
                 name: camera.name || camera.alias,
                 wilayah: camera.wilayah,
@@ -150,6 +152,7 @@ class RecordingService {
             const plain = cam.get({ plain: true });
             return {
                 id: plain.id,
+                st_name: parselabel.parseLabelIntoName(plain.name),
                 name: plain.name,
                 location: plain.location,
                 rtspUrl: plain.rtspUrl,

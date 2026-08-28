@@ -2,6 +2,8 @@ const { v4: uuidv4 } = require('crypto');
 const db = require('../models');
 const sqlserverService = require('./sqlserver.service');
 const mediamtxService = require('./mediamtx.service');
+const parselabel = require('../helpers/parse_label_into_name.helper')
+
 
 const { Camera, RecordingChunks, Sequelize } = db;
 const { Op } = Sequelize;
@@ -64,6 +66,7 @@ class CameraService {
             return {
                 id: plain.id,
                 sqlServerId: plain.sqlServerId,
+                st_name: parselabel.parseLabelIntoName(plain.alias),
                 alias: plain.alias,
                 name: plain.name || plain.alias,
                 rtsp: plain.rtsp,
@@ -166,7 +169,7 @@ class CameraService {
                         report.inserted.push({ id: newCamera.id, sqlServerId, alias });
                     } else {
                         // UPDATE: Retain existing PostgreSQL UUID id intact!
-                        const hasChanges = 
+                        const hasChanges =
                             camera.sqlServerId !== sqlServerId ||
                             camera.alias !== alias ||
                             camera.rtsp !== rtsp ||
@@ -322,10 +325,10 @@ class CameraService {
      */
     async executeFullSync() {
         console.info('[SyncEngine] Starting full cross-database & streaming synchronization cycle...');
-        
+
         // 1. Ingest & Transform from SQL Server into PostgreSQL
         const sqlServerToPgReport = await this.syncFromSqlServer();
-        
+
         // 2. Reconcile PostgreSQL into MediaMTX
         const pgToMediaMtxReport = await this.syncToMediaMTX();
 
