@@ -37,7 +37,7 @@ module.exports = (sequelize, DataType) => {
         },
         duration: {
             type: DataType.STRING,
-            allowNull: false,
+            allowNull: true,
             defaultValue: '00:00',
             field: 'duration'
         },
